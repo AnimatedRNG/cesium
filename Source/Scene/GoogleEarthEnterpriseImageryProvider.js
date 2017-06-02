@@ -14,6 +14,7 @@ define([
     '../Core/Math',
     '../Core/Rectangle',
     '../Core/Request',
+    '../Core/RequestState',
     '../Core/RequestType',
     '../Core/RuntimeError',
     '../Core/TileProviderError',
@@ -34,6 +35,7 @@ define([
     CesiumMath,
     Rectangle,
     Request,
+    RequestState,
     RequestType,
     RuntimeError,
     TileProviderError,
@@ -479,6 +481,10 @@ define([
 
         return promise
             .then(function(image) {
+                if (request.state === RequestState.CANCELLED) {
+                    // Request was cancelled due to low priority - try again later.
+                    return;
+                }
                 decodeGoogleEarthEnterpriseData(metadata.key, image);
                 var a = new Uint8Array(image);
                 var type;

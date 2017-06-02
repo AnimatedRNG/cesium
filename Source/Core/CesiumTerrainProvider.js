@@ -21,6 +21,7 @@ define([
         './OrientedBoundingBox',
         './QuantizedMeshTerrainData',
         './Request',
+        './RequestState',
         './RequestType',
         './TerrainProvider',
         './TileAvailability',
@@ -47,6 +48,7 @@ define([
         OrientedBoundingBox,
         QuantizedMeshTerrainData,
         Request,
+        RequestState,
         RequestType,
         TerrainProvider,
         TileAvailability,
@@ -550,6 +552,10 @@ define([
 
         var that = this;
         return when(promise, function(buffer) {
+            if (request.state === RequestState.CANCELLED) {
+                // Request was cancelled due to low priority - try again later.
+                return;
+            }
             if (defined(that._heightmapStructure)) {
                 return createHeightmapTerrainData(that, buffer, level, x, y, tmsY);
             } else {

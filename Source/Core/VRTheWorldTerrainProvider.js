@@ -17,6 +17,7 @@ define([
         './Math',
         './Rectangle',
         './Request',
+        './RequestState',
         './RequestType',
         './TerrainProvider',
         './TileProviderError'
@@ -296,6 +297,10 @@ define([
 
         var that = this;
         return when(promise, function(image) {
+            if (request.state === RequestState.CANCELLED) {
+                // Request was cancelled due to low priority - try again later.
+                return;
+            }
             return new HeightmapTerrainData({
                 buffer : getImagePixels(image),
                 width : that._heightmapWidth,

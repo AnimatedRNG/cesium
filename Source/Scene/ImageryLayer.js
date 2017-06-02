@@ -671,6 +671,12 @@ define([
 
         function success(image) {
             if (!defined(image)) {
+                if (imagery.request.state === RequestState.CANCELLED) {
+                    // Cancelled due to low priority - try again later.
+                    imagery.state = ImageryState.UNLOADED;
+                    imagery.request = undefined;
+                    return;
+                }
                 return failure();
             }
 
@@ -682,13 +688,6 @@ define([
         }
 
         function failure(e) {
-            if (imagery.request.state === RequestState.CANCELLED) {
-                // Cancelled due to low priority - try again later.
-                imagery.state = ImageryState.UNLOADED;
-                imagery.request = undefined;
-                return;
-            }
-
             // Initially assume failure.  handleError may retry, in which case the state will
             // change to TRANSITIONING.
             imagery.state = ImageryState.FAILED;

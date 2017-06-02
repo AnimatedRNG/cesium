@@ -17,6 +17,7 @@ define([
     './Math',
     './Rectangle',
     './Request',
+    './RequestState',
     './RequestType',
     './RuntimeError',
     './TaskProcessor',
@@ -39,6 +40,7 @@ define([
     CesiumMath,
     Rectangle,
     Request,
+    RequestState,
     RequestType,
     RuntimeError,
     TaskProcessor,
@@ -458,6 +460,12 @@ define([
 
             promise = requestPromise
                 .then(function(terrain) {
+                    if (request.state === RequestState.CANCELLED) {
+                        // Request was cancelled due to low priority - try again later.
+                        info.terrainState = TerrainState.UNKNOWN;
+                        return;
+                    }
+
                     if (defined(terrain)) {
                         return taskProcessor.scheduleTask({
                             buffer : terrain,
@@ -505,6 +513,11 @@ define([
 
         return promise
             .then(function() {
+                if (request.state === RequestState.CANCELLED) {
+                    info.terrainState = TerrainState.UNKNOWN;
+                    // Request was cancelled due to low priority - try again later.
+                    return;
+                }
                 var buffer = terrainCache.get(quadKey);
                 if (defined(buffer)) {
                     var credit = metadata.providers[info.terrainProvider];

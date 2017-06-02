@@ -244,7 +244,7 @@ define([
         var active = request.state === RequestState.ACTIVE;
         request.state = RequestState.CANCELLED;
         ++statistics.numberOfCancelledRequests;
-        request.deferred.reject('Cancelled');
+        request.deferred.resolve(undefined);
 
         if (active) {
             // Despite the Request being cancelled, the xhr request is still in flight.
