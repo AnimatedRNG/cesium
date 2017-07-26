@@ -1279,8 +1279,8 @@ define([
             commandList.push(regionGrowingCommands[i]);
         }
 
-        sectorHistogramCommand._timerQuery = new TimerQuery(frameState.context, frameState, function (timeElapsed) {
-            console.log('Sector Gathering Pass: ' + timeElapsed);
+        sectorHistogramCommand.timerQuery = new TimerQuery(frameState, function (timeElapsed) {
+            console.log('Sector Histogram Pass: ' + timeElapsed);
         });
         // Blend final result back into the main FBO
         commandList.push(blendCommand);
