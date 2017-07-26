@@ -274,7 +274,14 @@ define([
         this._depthTexture = !!getExtension(gl, ['WEBGL_depth_texture', 'WEBKIT_WEBGL_depth_texture']);
         this._textureFloat = !!getExtension(gl, ['OES_texture_float']);
         this._fragDepth = !!getExtension(gl, ['EXT_frag_depth']);
+
+        var webgl1TimerQuery = getExtension(gl, ['EXT_disjoint_timer_query']);
+        var webgl2TimerQuery = getExtension(gl, ['EXT_disjoint_timer_query_webgl2']);
+
         this._debugShaders = getExtension(gl, ['WEBGL_debug_shaders']);
+        this._timerQuery =
+            (!this._webgl2 && !!webgl1TimerQuery) ||
+            (this._webgl2 && !!webgl2TimerQuery);
 
         this._colorBufferFloat = this._webgl2 && !!getExtension(gl, ['EXT_color_buffer_float']);
 
@@ -286,6 +293,8 @@ define([
         this._textureFilterAnisotropic = textureFilterAnisotropic;
         ContextLimits._maximumTextureFilterAnisotropy = defined(textureFilterAnisotropic) ? gl.getParameter(textureFilterAnisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT) : 1.0;
 
+        this._disjointTimerQuery = gl.getParameter(WebGLConstants.GPU_DISJOINT_EXT);
+
         var glCreateVertexArray;
         var glBindVertexArray;
         var glDeleteVertexArray;
@@ -295,6 +304,15 @@ define([
         var glVertexAttribDivisor;
 
         var glDrawBuffers;
+
+        var createQuery;
+        var deleteQuery;
+        var isQuery;
+        var beginQuery;
+        var endQuery;
+        var queryCounter;
+        var getQuery;
+        var getQueryObject;
 
         var vertexArrayObject;
         var instancedArrays;
@@ -331,6 +349,15 @@ define([
             if (defined(drawBuffers)) {
                 glDrawBuffers = function(buffers) { drawBuffers.drawBuffersWEBGL(buffers); };
             }
+
+            createQuery = function() { webgl1TimerQuery.createQueryEXT(); };
+            deleteQuery = function(query) { webgl1TimerQuery.deleteQueryEXT(query); };
+            isQuery = function(query) { webgl1TimerQuery.isQueryEXT(query); };
+            beginQuery = function(target, query) { webgl1TimerQuery.beginQueryEXT(target, query); };
+            endQuery = function(target, query) { webgl1TimerQuery.endQueryEXT(target); };
+            queryCounter = function(query, target) { webgl1TimerQuery.queryCounter(query, target); };
+            getQuery = function(target, pname) { webgl1TimerQuery.getQueryEXT(target, pname); };
+            getQueryObject = function(query, pname) { webgl1TimerQuery.getQueryObjectEXT(query, pname); };
         }
 
         this.glCreateVertexArray = glCreateVertexArray;
@@ -342,6 +369,15 @@ define([
         this.glVertexAttribDivisor = glVertexAttribDivisor;
 
         this.glDrawBuffers = glDrawBuffers;
+
+        this.createQuery = createQuery;
+        this.deleteQuery = deleteQuery;
+        this.isQuery = isQuery;
+        this.beginQuery = beginQuery;
+        this.endQuery = endQuery;
+        this.queryCounter = queryCounter;
+        this.getQuery = getQuery;
+        this.getQueryObject = getQueryObject;
 
         this._vertexArrayObject = !!vertexArrayObject;
         this._instancedArrays = !!instancedArrays;
@@ -664,6 +700,27 @@ define([
         debugShaders : {
             get : function() {
                 return this._debugShaders;
+            }
+        },
+
+        /**
+         * <code>true</code> if either the EXT_disjoint_timer_query extension is supported in WebGL 1 or the
+         * EXT_disjoint_timer_query_webgl2 extension is supported in WebGL 2. This extension provides support
+         * for timer queries.
+         * @memberof Context.prototype
+         * @type {Boolean}
+         * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_disjoint_timer_query/}
+         * @see {@link https://www.khronos.org/registry/webgl/extensions/EXT_disjoint_timer_query_webgl2/}
+         */
+        timerQuery : {
+            get : function() {
+                return this._timerQuery;
+            }
+        },
+
+        disjointTimerQuery : {
+            get : function() {
+                return this._disjointTimerQuery;
             }
         },
 
