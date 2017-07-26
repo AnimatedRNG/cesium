@@ -22,6 +22,7 @@ define([
         '../Renderer/TextureMagnificationFilter',
         '../Renderer/TextureMinificationFilter',
         '../Renderer/TextureWrap',
+        '../Renderer/TimerQuery',
         '../Renderer/VertexArray',
         '../Scene/BlendEquation',
         '../Scene/BlendFunction',
@@ -57,6 +58,7 @@ define([
         TextureMagnificationFilter,
         TextureMinificationFilter,
         TextureWrap,
+        TimerQuery,
         VertexArray,
         BlendEquation,
         BlendFunction,
@@ -1060,7 +1062,6 @@ define([
                 }
             }
         }
-
         processor._drawCommands.regionGrowingCommands = regionGrowingCommands;
         processor._drawCommands.stencilCommands = stencilCommands;
         processor._drawCommands.blendCommand = blendCommand;
@@ -1278,6 +1279,9 @@ define([
             commandList.push(regionGrowingCommands[i]);
         }
 
+        sectorHistogramCommand._timerQuery = new TimerQuery(frameState.context, frameState, function (timeElapsed) {
+            console.log('Sector Gathering Pass: ' + timeElapsed);
+        });
         // Blend final result back into the main FBO
         commandList.push(blendCommand);
         if (this.AOViewEnabled && this.enableAO) {
