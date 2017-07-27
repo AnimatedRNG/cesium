@@ -29,6 +29,7 @@ define([
         '../Scene/BlendingState',
         '../Scene/StencilFunction',
         '../Scene/StencilOperation',
+        '../Shaders/PostProcessFilters/PointArrayVS',
         '../Shaders/PostProcessFilters/RegionGrowingPassGL1',
         '../Shaders/PostProcessFilters/RegionGrowingPassGL2',
         '../Shaders/PostProcessFilters/SectorHistogramPass',
@@ -65,6 +66,7 @@ define([
         BlendingState,
         StencilFunction,
         StencilOperation,
+        PointArrayVS,
         RegionGrowingPassGL1,
         RegionGrowingPassGL2,
         SectorHistogramPass,
@@ -107,6 +109,7 @@ define([
         this.sigmoidDomainOffset = options.sigmoidDomainOffset;
         this.sigmoidSharpness = options.sigmoidSharpness;
         this.useTimerQuery  = options.useTimerQuery;
+        this.randomReductionFactor = options.randomReductionFactor;
 
         this._pointArray = undefined;
 
@@ -485,6 +488,7 @@ define([
                                      kernelSize,
                                      useStencil,
                                      blendingState,
+                                     reductionFactor,
                                      fragmentShaderSource,
                                      processor,
                                      context,
@@ -493,32 +497,19 @@ define([
             createPointArray(processor, context);
         }
 
-        var vertexShaderSource =
-                     '#define EPS 1e-6 \n' +
-                     '#define kernelSize 9.0 \n\n' +
-                     'attribute vec4 position; \n' +
-                     'varying float centerPos; \n\n' +
-                     'uniform sampler2D pointCloud_depthTexture; \n\n' +
-                     'void main()  \n' +
-                     '{ \n' +
-                     '    vec2 textureCoordinates = 0.5 * position.xy + vec2(0.5); \n' +
-                     '    ivec2 screenSpaceCoordinates = ivec2(textureCoordinates * czm_viewport.zw); \n' +
-                     '    if (length(texture2D(pointCloud_depthTexture, textureCoordinates)) > EPS) { \n' +
-                     '        gl_Position = position; \n' +
-                     '        gl_PointSize = kernelSize; \n' +
-                     '        centerPos = float(screenSpaceCoordinates.x + screenSpaceCoordinates.y * int(czm_viewport.z)); \n' +
-                     '    } else {\n' +
-                     '        gl_Position = vec4(-10); \n' +
-                     '        centerPos = 0.0; \n' +
-                     '    } \n' +
-                     '} \n';
-
         var uniformMap = (defined(overrides.uniformMap)) ? overrides.uniformMap : {};
         uniformMap.pointCloud_depthTexture = function () {
             return depthTexture;
         };
+        uniformMap.reductionFactor = function () {
+            return reductionFactor;
+        };
 
-        vertexShaderSource = replaceConstants(vertexShaderSource, 'kernelSize', kernelSize.toFixed(1));
+        var vertexShaderSource = replaceConstants(PointArrayVS, 'kernelSize', kernelSize.toFixed(1));
+
+        if (reductionFactor > 1.0 - 1e-6) {
+            vertexShaderSource = replaceConstants(vertexShaderSource, 'useReduction', false);
+        }
 
         var renderState = overrides.renderState;
 
@@ -587,6 +578,7 @@ define([
             neighborhoodSize,
             true,
             processor._minBlend,
+            processor.randomReductionFactor,
             SectorHistogramPass,
             processor,
             context, {
@@ -658,6 +650,7 @@ define([
             processor.densityHalfWidth * 2 + 1,
             false,
             processor._minBlend,
+            1.0,
             densityEstimationStr,
             processor,
             context, {
@@ -684,6 +677,7 @@ define([
             processor.densityHalfWidth * 2 + 1,
             true,
             processor._addBlend,
+            1.0,
             edgeCullingStr,
             processor,
             context, {
@@ -1178,7 +1172,8 @@ define([
             tileset.pointCloudPostProcessorOptions.AOViewEnabled !== this.AOViewEnabled ||
             tileset.pointCloudPostProcessorOptions.sigmoidDomainOffset !== this.sigmoidDomainOffset ||
             tileset.pointCloudPostProcessorOptions.sigmoidSharpness !== this.sigmoidSharpness ||
-            tileset.pointCloudPostProcessorOptions.useTimerQuery !== this.useTimerQuery) {
+            tileset.pointCloudPostProcessorOptions.useTimerQuery !== this.useTimerQuery ||
+            tileset.pointCloudPostProcessorOptions.randomReductionFactor !== this.randomReductionFactor) {
             this.occlusionAngle = tileset.pointCloudPostProcessorOptions.occlusionAngle;
             this.rangeParameter = tileset.pointCloudPostProcessorOptions.rangeParameter;
             this.neighborhoodHalfWidth = tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth;
@@ -1195,6 +1190,7 @@ define([
             this.sigmoidDomainOffset = tileset.pointCloudPostProcessorOptions.sigmoidDomainOffset;
             this.sigmoidSharpness = tileset.pointCloudPostProcessorOptions.sigmoidSharpness;
             this.useTimerQuery = tileset.pointCloudPostProcessorOptions.useTimerQuery;
+            this.randomReductionFactor = tileset.pointCloudPostProcessorOptions.randomReductionFactor;
             dirty = true;
         }
 
