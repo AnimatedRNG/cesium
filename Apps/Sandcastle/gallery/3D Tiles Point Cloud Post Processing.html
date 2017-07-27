@@ -209,7 +209,7 @@ Sandcastle.addToolbarButton('Run benchmark', function() {
                 tileset.pointCloudPostProcessorOptions.enabled = false;
                 console.log("Filter off");
         }, {});
-        curr += 2000;
+        curr += 10000;
 
         moveAndGetBenchmark(orientation, name, curr + 10, 990, function (params) {
                 tileset.pointCloudPostProcessorOptions.enabled = true;
@@ -221,7 +221,7 @@ Sandcastle.addToolbarButton('Run benchmark', function() {
                 tileset.pointCloudPostProcessorOptions.numRegionGrowingPasses = 5;
                 console.log("Filter on theoretical optimium");
         }, {});
-        curr += 2000;
+        curr += 10000;
 
         for (var nhw = 1; nhw <= 7; nhw++) {
             moveAndGetBenchmark(orientation, name, curr + 10, 990, function (params) {
