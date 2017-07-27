@@ -1132,6 +1132,29 @@ define([
         return shader;
     }
 
+    function updateTimerQueries(processor, frameState) {
+        function makeTimerQuery(commandToModifyName) {
+            return new TimerQuery(frameState, function (timeElapsed) {
+                console.log(commandToModifyName + ': ' + timeElapsed);
+            });
+        }
+
+        var commands = processor._drawCommands;
+        for (var commandName in commands) {
+            if (commands.hasOwnProperty(commandName)) {
+                var commandsMember = commands[commandName];
+                if (commandsMember.constructor === Array) {
+                    var numCommands = commandsMember.length;
+                    for (var i = 0; i < numCommands; i++) {
+                        processor._drawCommands[commandName][i].timerQuery = makeTimerQuery(commandName + ' ' + i);
+                    }
+                } else {
+                    processor._drawCommands[commandName].timerQuery = makeTimerQuery(commandName);
+                }
+            }
+        }
+    }
+
     PointCloudPostProcessor.prototype.update = function(frameState, commandStart, tileset) {
         if (!processingSupported(frameState.context)) {
             return;
@@ -1188,6 +1211,13 @@ define([
             return attenuationMultiplier;
         };
 
+        function createTimerQuery(str) {
+            return new TimerQuery(frameState, function (timeElapsed) {
+                console.log(str + ': ' + timeElapsed);
+            });
+        }
+
+        // Change so that this actually injects into prior commands!
         for (i = commandStart; i < commandEnd; ++i) {
             var command = commandList[i];
             if (command.primitiveType !== PrimitiveType.POINTS) {
@@ -1210,11 +1240,14 @@ define([
                     derivedCommandRenderState
                 );
 
+                var priorQuery = createTimerQuery('prior command ' + i);
+
                 // TODO: Even if the filter is disabled,
                 // point attenuation settings are not! Fix this behavior.
                 var derivedCommandUniformMap = derivedCommand.uniformMap;
                 derivedCommandUniformMap['u_pointAttenuationMaxSize'] = attenuationUniformFunction;
                 derivedCommand.uniformMap = derivedCommandUniformMap;
+                derivedCommand.timerQuery = priorQuery;
 
                 derivedCommand.pass = Pass.CESIUM_3D_TILE; // Overrides translucent commands
                 command.dirty = false;
@@ -1222,6 +1255,8 @@ define([
 
             commandList[i] = derivedCommand;
         }
+
+        updateTimerQueries(this, frameState);
 
         // Apply processing commands
         var edgeCullingCommand = this._drawCommands.edgeCullingCommand;
@@ -1235,6 +1270,12 @@ define([
         var blendCommand = this._drawCommands.blendCommand;
         var aoCommand = this._drawCommands.aoCommand;
         var numRegionGrowingCommands = regionGrowingCommands.length;
+
+        var startOfFrame = new TimerQuery(frameState, function (timeElapsed) {
+            console.log('\n\n\nNew Frame:');
+        });
+        startOfFrame.begin();
+        startOfFrame.end();
 
         commandList.push(clearCommands['screenSpacePass']);
         commandList.push(clearCommands['sectorHistogramPass']);
@@ -1260,9 +1301,6 @@ define([
             commandList.push(regionGrowingCommands[i]);
         }
 
-        sectorHistogramCommand.timerQuery = new TimerQuery(frameState, function (timeElapsed) {
-            console.log('Sector Histogram Pass: ' + timeElapsed);
-        });
         // Blend final result back into the main FBO
         commandList.push(blendCommand);
         if (this.AOViewEnabled && this.enableAO) {
