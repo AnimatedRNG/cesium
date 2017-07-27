@@ -177,7 +177,6 @@ Sandcastle.addToolbarButton('Save camera', function() {
 });
 
 Sandcastle.addToolbarButton('Run benchmark', function() {
-    tileset.pointCloudPostProcessorOptions.enabled = true;
     tileset.pointCloudPostProcessorOptions.useTimerQuery = false;
     var camera = viewer.camera;
 
@@ -281,8 +280,6 @@ Sandcastle.addToolbarButton('Run benchmark', function() {
 
     var curr = runTests(tympanum, 'tympanum', 10);
     curr = runTests(painting, 'painting', curr);
-
-    //tileset.pointCloudPostProcessorOptions.enabled = false;
 });
 
 Sandcastle.addToolbarMenu([{
