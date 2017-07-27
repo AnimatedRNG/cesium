@@ -106,6 +106,7 @@ define([
         this.AOViewEnabled = options.AOViewEnabled;
         this.sigmoidDomainOffset = options.sigmoidDomainOffset;
         this.sigmoidSharpness = options.sigmoidSharpness;
+        this.useTimerQuery  = options.useTimerQuery;
 
         this._pointArray = undefined;
 
@@ -1176,7 +1177,8 @@ define([
             tileset.pointCloudPostProcessorOptions.enableAO !== this.enableAO ||
             tileset.pointCloudPostProcessorOptions.AOViewEnabled !== this.AOViewEnabled ||
             tileset.pointCloudPostProcessorOptions.sigmoidDomainOffset !== this.sigmoidDomainOffset ||
-            tileset.pointCloudPostProcessorOptions.sigmoidSharpness !== this.sigmoidSharpness) {
+            tileset.pointCloudPostProcessorOptions.sigmoidSharpness !== this.sigmoidSharpness ||
+            tileset.pointCloudPostProcessorOptions.useTimerQuery !== this.useTimerQuery) {
             this.occlusionAngle = tileset.pointCloudPostProcessorOptions.occlusionAngle;
             this.rangeParameter = tileset.pointCloudPostProcessorOptions.rangeParameter;
             this.neighborhoodHalfWidth = tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth;
@@ -1192,6 +1194,7 @@ define([
             this.AOViewEnabled = tileset.pointCloudPostProcessorOptions.AOViewEnabled;
             this.sigmoidDomainOffset = tileset.pointCloudPostProcessorOptions.sigmoidDomainOffset;
             this.sigmoidSharpness = tileset.pointCloudPostProcessorOptions.sigmoidSharpness;
+            this.useTimerQuery = tileset.pointCloudPostProcessorOptions.useTimerQuery;
             dirty = true;
         }
 
@@ -1240,14 +1243,16 @@ define([
                     derivedCommandRenderState
                 );
 
-                var priorQuery = createTimerQuery('prior command ' + i);
-
                 // TODO: Even if the filter is disabled,
                 // point attenuation settings are not! Fix this behavior.
                 var derivedCommandUniformMap = derivedCommand.uniformMap;
                 derivedCommandUniformMap['u_pointAttenuationMaxSize'] = attenuationUniformFunction;
                 derivedCommand.uniformMap = derivedCommandUniformMap;
-                derivedCommand.timerQuery = priorQuery;
+
+                if (this.useTimerQuery) {
+                    var priorQuery = createTimerQuery('prior command ' + i);
+                    derivedCommand.timerQuery = priorQuery;
+                }
 
                 derivedCommand.pass = Pass.CESIUM_3D_TILE; // Overrides translucent commands
                 command.dirty = false;
@@ -1256,7 +1261,9 @@ define([
             commandList[i] = derivedCommand;
         }
 
-        updateTimerQueries(this, frameState);
+        if (this.useTimerQuery) {
+            updateTimerQueries(this, frameState);
+        }
 
         // Apply processing commands
         var edgeCullingCommand = this._drawCommands.edgeCullingCommand;
@@ -1271,11 +1278,13 @@ define([
         var aoCommand = this._drawCommands.aoCommand;
         var numRegionGrowingCommands = regionGrowingCommands.length;
 
-        var startOfFrame = new TimerQuery(frameState, function (timeElapsed) {
-            console.log('\n\n\nNew Frame:');
-        });
-        startOfFrame.begin();
-        startOfFrame.end();
+        if (this.useTimerQuery) {
+            var startOfFrame = new TimerQuery(frameState, function (timeElapsed) {
+                console.log('\n\n\nNew Frame:');
+            });
+            startOfFrame.begin();
+            startOfFrame.end();
+        }
 
         commandList.push(clearCommands['screenSpacePass']);
         commandList.push(clearCommands['sectorHistogramPass']);

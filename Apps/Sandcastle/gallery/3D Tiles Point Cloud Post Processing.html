@@ -163,6 +163,10 @@ Sandcastle.addToggleButton('Enable AO', true, function(checked) {
     tileset.pointCloudPostProcessorOptions.enableAO = checked;
 });
 
+Sandcastle.addToggleButton('Display Timer Query', true, function(checked) {
+    tileset.pointCloudPostProcessorOptions.useTimerQuery = checked;
+});
+
 Sandcastle.addToolbarMenu([{
     text : 'Color View',
     onselect : function() {
