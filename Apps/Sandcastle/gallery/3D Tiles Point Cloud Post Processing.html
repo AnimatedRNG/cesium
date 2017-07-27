@@ -167,6 +167,124 @@ Sandcastle.addToggleButton('Display Timer Query', true, function(checked) {
     tileset.pointCloudPostProcessorOptions.useTimerQuery = checked;
 });
 
+Sandcastle.addToolbarButton('Save camera', function() {
+    var camera = viewer.camera;
+    var cameraString = 'camera.position = new Cesium.Cartesian3(' + camera.positionWC.x + ', ' + camera.positionWC.y + ', ' + camera.positionWC.z + ');\n'+
+                       'camera.direction = new Cesium.Cartesian3(' + camera.directionWC.x + ', ' + camera.directionWC.y + ', ' + camera.directionWC.z + ');\n'+
+                       'camera.right = new Cesium.Cartesian3(' + camera.rightWC.x + ', ' + camera.rightWC.y + ', ' + camera.rightWC.z + ');\n'+
+                       'camera.up = new Cesium.Cartesian3(' + camera.upWC.x + ', ' + camera.upWC.y + ', ' + camera.upWC.z + ');\n';
+    console.log(cameraString);
+});
+
+Sandcastle.addToolbarButton('Run benchmark', function() {
+    tileset.pointCloudPostProcessorOptions.enabled = true;
+    tileset.pointCloudPostProcessorOptions.useTimerQuery = false;
+    var camera = viewer.camera;
+
+    function moveAndGetBenchmark(orientation, name, initial, timeout, startCallback, params) {
+        setTimeout(function () {
+            tileset.pointCloudPostProcessorOptions.useTimerQuery = false;
+
+            camera.position = orientation.position;
+            camera.direction = orientation.direction;
+            camera.right = orientation.right;
+            camera.up = orientation.up;
+
+            console.log("Currently at " + name + " at time " + initial);
+
+            tileset.pointCloudPostProcessorOptions.useTimerQuery = true;
+            startCallback(params);
+        }, initial);
+
+        setTimeout(function() {
+            tileset.pointCloudPostProcessorOptions.useTimerQuery = false;
+            console.log("Finished test. Current time: " + (initial + timeout));
+        }, initial + timeout);
+    }
+
+    function runTests(orientation, name, currentTime) {
+        var curr = currentTime;
+
+        moveAndGetBenchmark(orientation, name, curr + 10, 990, function (params) {
+                tileset.pointCloudPostProcessorOptions.enabled = false;
+                console.log("Filter off");
+        }, {});
+        curr += 2000;
+
+        moveAndGetBenchmark(orientation, name, curr + 10, 990, function (params) {
+                tileset.pointCloudPostProcessorOptions.enabled = true;
+                tileset.pointCloudPostProcessorOptions.AOViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.densityViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.stencilViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth = 4;
+                tileset.pointCloudPostProcessorOptions.densityHalfWidth = 4;
+                tileset.pointCloudPostProcessorOptions.numRegionGrowingPasses = 5;
+                console.log("Filter on theoretical optimium");
+        }, {});
+        curr += 2000;
+
+        for (var nhw = 1; nhw <= 7; nhw++) {
+            moveAndGetBenchmark(orientation, name, curr + 10, 990, function (params) {
+                tileset.pointCloudPostProcessorOptions.enabled = true;
+                tileset.pointCloudPostProcessorOptions.AOViewEnabled = true;
+                tileset.pointCloudPostProcessorOptions.densityViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.stencilViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth = params.nhw;
+                tileset.pointCloudPostProcessorOptions.densityHalfWidth = 4;
+                tileset.pointCloudPostProcessorOptions.numRegionGrowingPasses = 5;
+                console.log("nhw: " + params.nhw);
+            }, {nhw : nhw});
+            curr += 2000;
+        }
+        for (var dnhw = 1; dnhw <= 7; dnhw++) {
+            moveAndGetBenchmark(orientation, name, curr + 10, 990, function (params) {
+                tileset.pointCloudPostProcessorOptions.enabled = true;
+                tileset.pointCloudPostProcessorOptions.AOViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.densityViewEnabled = true;
+                tileset.pointCloudPostProcessorOptions.stencilViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth = 4;
+                tileset.pointCloudPostProcessorOptions.densityHalfWidth = params.dnhw;
+                tileset.pointCloudPostProcessorOptions.numRegionGrowingPasses = 5;
+                console.log("dnhw: " + params.dnhw);
+            }, {dnhw : dnhw});
+            curr += 2000;
+        }
+        for (var rgi = 2; rgi <= 10; rgi++) {
+            moveAndGetBenchmark(orientation, name, curr + 10, 990, function (params) {
+                tileset.pointCloudPostProcessorOptions.enabled = true;
+                tileset.pointCloudPostProcessorOptions.AOViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.densityViewEnabled = false;
+                tileset.pointCloudPostProcessorOptions.stencilViewEnabled = true;
+                tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth = 4;
+                tileset.pointCloudPostProcessorOptions.densityHalfWidth = 4;
+                tileset.pointCloudPostProcessorOptions.numRegionGrowingPasses = params.rgi;
+                console.log("rgi: " + params.rgi);
+            }, {rgi : rgi});
+            curr += 2000;
+        }
+        return curr;
+    }
+
+    var tympanum = {
+        position : new Cesium.Cartesian3(4401412.2194143655, 224956.45916124727, 4595140.435677684),
+        direction : new Cesium.Cartesian3(0.060398335736332985, 0.9945124651108062, -0.08542246647989672),
+        right : new Cesium.Cartesian3(0.7208562925370857, -0.10265383733609339, -0.6854402929430559),
+        up : new Cesium.Cartesian3(0.6904478593999468, 0.02017786954568671, 0.7231006894137417)
+    }
+
+    var painting = {
+        position : new Cesium.Cartesian3(4401414.253304935, 224980.31127410012, 4595140.968069139),
+        direction : new Cesium.Cartesian3(-0.8951430504558824, 0.0028263295207434213, 0.4457700428269917),
+        right : new Cesium.Cartesian3(-0.014359567855293374, 0.9992781429416056, -0.03517095179527337),
+        up : new Cesium.Cartesian3(0.44554766527448775, 0.03788409825528901, 0.8944563002561035)
+    };
+
+    var curr = runTests(tympanum, 'tympanum', 10);
+    curr = runTests(painting, 'painting', curr);
+
+    //tileset.pointCloudPostProcessorOptions.enabled = false;
+});
+
 Sandcastle.addToolbarMenu([{
     text : 'Color View',
     onselect : function() {
