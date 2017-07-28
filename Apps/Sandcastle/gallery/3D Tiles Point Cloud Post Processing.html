@@ -303,13 +303,7 @@ Sandcastle.addToolbarButton('Run benchmark', function() {
     var curr = runTests(tympanum, 'tympanum', curr);
     curr = runTests(painting, 'painting', curr);
     moveAndGetBenchmark(tympanum, name, curr + 10, 990, function (params) {
-        tileset.pointCloudPostProcessorOptions.enabled = true;
-        tileset.pointCloudPostProcessorOptions.AOViewEnabled = false;
-        tileset.pointCloudPostProcessorOptions.densityViewEnabled = false;
-        tileset.pointCloudPostProcessorOptions.stencilViewEnabled = false;
-        tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth = 4;
-        tileset.pointCloudPostProcessorOptions.densityHalfWidth = 4;
-        tileset.pointCloudPostProcessorOptions.numRegionGrowingPasses = 5;
+        tileset.pointCloudPostProcessorOptions.enabled = false;
         console.log("Benchmark complete.");
     }, {});
 });
