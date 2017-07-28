@@ -1,21 +1,29 @@
-#extension GL_EXT_draw_buffers : enable
+#version 300 es
 
 #define TAU 6.28318530718
 #define PI 3.14159265359
+#define PI_4 0.785398163
+#define C0 1.57073
+#define C1 -0.212053
+#define C2 0.0740935
+#define C3 -0.0186166
 #define EPS 1e-6
+#define neighborhoodHalfWidth 4  // TUNABLE PARAMETER -- half-width of point-occlusion neighborhood
+#define neighborhoodSize 9
 #define numSectors 8
-#define maxAngle 1.57079632679  // The maximum sector angle is PI / 2
 
-#define trianglePeriod 1e-5
+#define trianglePeriod 1e-2
 #define useTriangle
 
-uniform sampler2D sectorFirst;
-uniform sampler2D sectorSecond;
-uniform sampler2D pointCloud_ECTexture;
-uniform float occlusionAngle;
 uniform float ONE;
 
-varying vec2 v_textureCoordinates;
+uniform sampler2D pointCloud_ECTexture;
+uniform float occlusionAngle;
+uniform sampler2D sectorLUT;
+in vec2 v_textureCoordinates;
+
+layout(location = 0) out vec4 depthOut;
+layout(location = 1) out vec4 aoOut;
 
 // TODO: Include Uber copyright
 
@@ -141,23 +149,134 @@ float triangleFP64(in vec2 x, in float period) {
     return abs(normalized.x + normalized.y) + EPS;
 }
 
+float acosFast(in float inX) {
+    float x = abs(inX);
+    float res = ((C3 * x + C2) * x + C1) * x + C0; // p(x)
+    res *= sqrt(1.0 - x);
+
+    return (inX >= 0.0) ? res : PI - res;
+}
+
+ivec2 readSectors(in ivec2 sectorPosition) {
+    vec2 texCoordinate = vec2(sectorPosition + ivec2(neighborhoodHalfWidth)) /
+                         float(neighborhoodHalfWidth * 2);
+    vec2 unscaled = texture(sectorLUT, texCoordinate).rg;
+    return ivec2(unscaled * float(numSectors));
+}
+
 void main() {
-    vec4 sh1 = texture2D(sectorFirst, v_textureCoordinates) * maxAngle;
-    vec4 sh2 = texture2D(sectorSecond, v_textureCoordinates) * maxAngle;
+    float near = czm_entireFrustum.x;
+    float far = czm_entireFrustum.y;
+    ivec2 pos = ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y));
 
-    vec4 ones = vec4(1.0);
-    float accumulator = dot(sh1, ones) + dot(sh2, ones);
+    // The position of this pixel in 3D (i.e the position of the point)
+    vec3 centerPosition = texture(pointCloud_ECTexture, v_textureCoordinates).xyz;
+    bool invalid = false;
 
-    vec3 centerPosition = texture2D(pointCloud_ECTexture, v_textureCoordinates).xyz;
+    // If the EC of this pixel is zero, that means that it's not a valid
+    // pixel. We don't care about reprojecting it.
+    if (length(centerPosition) < EPS) {
+        depthOut = vec4(0.0);
+        aoOut = vec4(1.0 - EPS);
+    }
+
+    // We split our region of interest (the point of interest and its
+    // neighbors)
+    // into sectors. For the purposes of this shader, we have eight
+    // sectors.
+    //
+    // Each entry of sector_histogram contains the current best horizon
+    // pixel angle
+    ivec2 halfNeighborhood = ivec2(neighborhoodHalfWidth / 2,
+                                   neighborhoodHalfWidth / 2);
+    // Upper left corner of the neighborhood
+    ivec2 upperLeftCorner = pos - halfNeighborhood;
+    // Lower right corner of the neighborhood
+    ivec2 lowerRightCorner = pos + halfNeighborhood;
+
+    // The widest the cone can be is 90 degrees
+    float maxAngle = PI / 2.0;
+
+    // Our sector array defaults to an angle of "maxAngle" in each sector
+    // (i.e no horizon pixels!)
+    float sh[numSectors];
+    for (int i = 0; i < numSectors; i++) {
+        sh[i] = maxAngle;
+    }
+
+    // Right now this is obvious because everything happens in eye space,
+    // but this kind of statement is nice for a reference implementation
+    vec3 viewer = vec3(0.0);
+
+    for (int i = -neighborhoodHalfWidth; i <= neighborhoodHalfWidth; i++) {
+        for (int j = -neighborhoodHalfWidth; j <= neighborhoodHalfWidth; j++) {
+            // d is the relative offset from the horizon pixel to the center pixel
+            // in 2D
+            ivec2 d = ivec2(i, j);
+            ivec2 pI = pos + d;
+
+            // We now calculate the actual 3D position of the horizon pixel (the horizon point)
+            vec3 neighborPosition = texelFetch(pointCloud_ECTexture, ivec2(pI), 0).xyz;
+
+            // If our horizon pixel doesn't exist, ignore it and move on
+            if (length(neighborPosition) < EPS || pI == pos) {
+                continue;
+            }
+
+            // sectors contains both possible sectors that the
+            // neighbor pixel could be in
+            ivec2 sectors = readSectors(d);
+
+            // This is the offset of the horizon point from the center in 3D
+            // (a 3D analog of d)
+            vec3 c = neighborPosition - centerPosition;
+
+            // Now we calculate the dot product between the vector
+            // from the viewer to the center and the vector to the horizon pixel.
+            // We normalize both vectors first because we only care about their relative
+            // directions
+            // TODO: Redo the math and figure out whether the result should be negated or not
+            float dotProduct = dot(normalize(viewer - centerPosition),
+                                   normalize(c));
+
+            // We calculate the angle that this horizon pixel would make
+            // in the cone. The dot product is be equal to
+            // |vec_1| * |vec_2| * cos(angle_between), and in this case,
+            // the magnitude of both vectors is 1 because they are both
+            // normalized.
+            float angle = acosFast(dotProduct);
+
+            // This horizon point is behind the current point. That means that it can't
+            // occlude the current point. So we ignore it and move on.
+            if (angle > maxAngle || angle <= 0.0)
+                continue;
+            // If we've found a horizon pixel, store it in the histogram
+            if (sh[sectors.x] > angle) {
+                sh[sectors.x] = angle;
+            }
+            if (sh[sectors.y] > angle) {
+                sh[sectors.y] = angle;
+            }
+        }
+    }
+
+    float accumulator = 0.0;
+    for (int i = 0; i < numSectors; i++) {
+        float angle = sh[i];
+        // If the z component is less than zero,
+        // that means that there is no valid horizon pixel
+        if (angle <= 0.0 || angle > maxAngle)
+            angle = maxAngle;
+        accumulator += angle;
+    }
 
     // The solid angle is too small, so we occlude this point
-    if (accumulator < (2.0 * PI) * (1.0 - occlusionAngle) ||
-        length(centerPosition) < EPS) {
-        gl_FragData[0] = vec4(0.0);
-        gl_FragData[1] = vec4(1.0 - EPS);
+    if (accumulator < (2.0 * PI) * (1.0 - occlusionAngle)) {
+        depthOut = vec4(0);
+        aoOut = vec4(1.0 - EPS);
     } else {
         float occlusion = clamp(accumulator / (4.0 * PI), 0.0, 1.0);
-        gl_FragData[1] = czm_packDepth(occlusion);
+        aoOut = czm_packDepth(occlusion);
 
         // Write out the distance of the point
         //
@@ -199,7 +318,7 @@ void main() {
         // the region growing pass.
         vec2 hpl = lengthFP64(centerPosition);
         float triangleResult = triangleFP64(hpl, trianglePeriod);
-        gl_FragData[0] = czm_packDepth(triangleResult);
+        depthOut = czm_packDepth(triangleResult);
 #else
         vec2 lengthOfFrustum = subFP64(split(czm_clampedFrustum.y),
                                        split(czm_clampedFrustum.x));
@@ -208,7 +327,7 @@ void main() {
         vec2 normalizedDepthFP64 = sumFP64(divFP64(centerPositionLength,
                                            lengthOfFrustum),
                                            frustumStart);
-        gl_FragData[0] = czm_packDepth(normalizedDepthFP64.x + normalizedDepthFP64.y);
+        depthOut = czm_packDepth(normalizedDepthFP64.x + normalizedDepthFP64.y);
 #endif
     }
 }
