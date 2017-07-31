@@ -456,6 +456,13 @@ define([
             processor.useTriangle
         );
 
+        if (processor.dropoutFactor < 1e-6) {
+            pointOcclusionStr = replaceConstants(
+                pointOcclusionStr,
+                'dropoutEnabled',
+                false);
+        }
+
         return context.createViewportQuadCommand(pointOcclusionStr, {
             uniformMap : uniformMap,
             framebuffer : processor._framebuffers.screenSpacePass,
@@ -477,6 +484,9 @@ define([
             },
             maxAbsRatio : function() {
                 return processor.maxAbsRatio;
+            },
+            dropoutFactor : function() {
+                return processor.dropoutFactor;
             }
         };
 
@@ -485,6 +495,13 @@ define([
             'neighborhoodHalfWidth',
             processor.densityHalfWidth
         );
+
+        if (processor.dropoutFactor < 1e-6 || !context.webgl2) {
+            densityEdgeCullStr = replaceConstants(
+                densityEdgeCullStr,
+                'dropoutEnabled',
+                false);
+        }
 
         return context.createViewportQuadCommand(densityEdgeCullStr, {
             uniformMap : uniformMap,
