@@ -104,11 +104,8 @@ define([
         this.AOViewEnabled = options.AOViewEnabled;
         this.sigmoidDomainOffset = options.sigmoidDomainOffset;
         this.sigmoidSharpness = options.sigmoidSharpness;
-<<<<<<< HEAD
         this.useTimerQuery  = options.useTimerQuery;
-=======
         this.dropoutFactor = options.dropoutFactor;
->>>>>>> point-cloud-processor-ss
 
         this._pointArray = undefined;
 
