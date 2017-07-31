@@ -104,7 +104,11 @@ define([
         this.AOViewEnabled = options.AOViewEnabled;
         this.sigmoidDomainOffset = options.sigmoidDomainOffset;
         this.sigmoidSharpness = options.sigmoidSharpness;
+<<<<<<< HEAD
         this.useTimerQuery  = options.useTimerQuery;
+=======
+        this.dropoutFactor = options.dropoutFactor;
+>>>>>>> point-cloud-processor-ss
 
         this._pointArray = undefined;
 
@@ -434,6 +438,9 @@ define([
             },
             occlusionAngle : function() {
                 return processor.occlusionAngle;
+            },
+            dropoutFactor : function() {
+                return processor.dropoutFactor;
             },
             ONE : function() {
                 return 1.0;
@@ -978,7 +985,8 @@ define([
             tileset.pointCloudPostProcessorOptions.AOViewEnabled !== this.AOViewEnabled ||
             tileset.pointCloudPostProcessorOptions.sigmoidDomainOffset !== this.sigmoidDomainOffset ||
             tileset.pointCloudPostProcessorOptions.useTimerQuery !== this.useTimerQuery ||
-            tileset.pointCloudPostProcessorOptions.sigmoidSharpness !== this.sigmoidSharpness) {
+            tileset.pointCloudPostProcessorOptions.sigmoidSharpness !== this.sigmoidSharpness ||
+            tileset.pointCloudPostProcessorOptions.dropoutFactor !== this.dropoutFactor) {
             this.occlusionAngle = tileset.pointCloudPostProcessorOptions.occlusionAngle;
             this.rangeParameter = tileset.pointCloudPostProcessorOptions.rangeParameter;
             this.neighborhoodHalfWidth = tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth;
@@ -995,6 +1003,7 @@ define([
             this.sigmoidDomainOffset = tileset.pointCloudPostProcessorOptions.sigmoidDomainOffset;
             this.sigmoidSharpness = tileset.pointCloudPostProcessorOptions.sigmoidSharpness;
             this.useTimerQuery = tileset.pointCloudPostProcessorOptions.useTimerQuery;
+            this.dropoutFactor = tileset.pointCloudPostProcessorOptions.dropoutFactor;
             dirty = true;
         }
 
