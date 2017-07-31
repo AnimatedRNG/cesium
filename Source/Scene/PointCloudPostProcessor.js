@@ -80,7 +80,6 @@ define([
         this._colorTextures = undefined;
         this._ecTexture = undefined;
         this._depthTextures = undefined;
-        this._sectorTextures = undefined;
         this._densityTexture = undefined;
         this._edgeCullingTexture = undefined;
         this._sectorLUTTexture = undefined;
@@ -89,6 +88,7 @@ define([
         this._drawCommands = undefined;
         this._clearCommands = undefined;
 
+        this.densityScaleFactor = 10.0;
         this.occlusionAngle = options.occlusionAngle;
         this.rangeParameter = options.rangeParameter;
         this.neighborhoodHalfWidth = options.neighborhoodHalfWidth;
@@ -185,8 +185,6 @@ define([
         processor._depthTextures[0].destroy();
         processor._depthTextures[1].destroy();
         processor._ecTexture.destroy();
-        processor._sectorTextures[0].destroy();
-        processor._sectorTextures[1].destroy();
         processor._sectorLUTTexture.destroy();
         processor._aoTextures[0].destroy();
         processor._aoTextures[1].destroy();
@@ -206,7 +204,6 @@ define([
         processor._colorTextures = undefined;
         processor._ecTexture = undefined;
         processor._depthTextures = undefined;
-        processor._sectorTextures = undefined;
         processor._densityTexture = undefined;
         processor._edgeCullingTexture = undefined;
         processor._sectorLUTTexture = undefined;
@@ -261,7 +258,6 @@ define([
         var screenHeight = context.drawingBufferHeight;
 
         var colorTextures = new Array(2);
-        var sectorTextures = new Array(2);
         var depthTextures = new Array(3);
         var aoTextures = new Array(2);
 
@@ -328,15 +324,6 @@ define([
                 sampler : createSampler()
             });
 
-            sectorTextures[i] = new Texture({
-                context : context,
-                width : screenWidth,
-                height : screenHeight,
-                pixelFormat : PixelFormat.RGBA,
-                pixelDatatype : PixelDatatype.FLOAT,
-                sampler : createSampler()
-            });
-
             depthTextures[i] = new Texture({
                 context : context,
                 width : screenWidth,
@@ -386,12 +373,6 @@ define([
                 colorTextures : [aoTextures[0]],
                 destroyAttachments : false
             }),
-            sectorHistogramPass : new Framebuffer({
-                context : context,
-                colorTextures : [sectorTextures[0], sectorTextures[1]],
-                depthStencilTexture: dirty,
-                destroyAttachments : false
-            }),
             stencilMask : new Framebuffer({
                 context : context,
                 depthStencilTexture: dirty,
@@ -400,11 +381,7 @@ define([
             densityEstimationPass : new Framebuffer({
                 context : context,
                 colorTextures : [densityMap],
-                destroyAttachments : false
-            }),
-            edgeCullingPass : new Framebuffer({
-                context : context,
-                colorTextures : [edgeCullingTexture],
+                depthStencilTexture: dirty,
                 destroyAttachments : false
             }),
             regionGrowingPassA : new Framebuffer({
@@ -425,7 +402,6 @@ define([
             })
         };
         processor._depthTextures = depthTextures;
-        processor._sectorTextures = sectorTextures;
         processor._densityTexture = densityMap;
         processor._edgeCullingTexture = edgeCullingTexture;
         processor._sectorLUTTexture = sectorLUTTexture;
@@ -476,26 +452,11 @@ define([
             processor.useTriangle
         );
 
-        var func = StencilFunction.EQUAL;
-        var op = {
-            fail : StencilOperation.KEEP,
-            zFail : StencilOperation.KEEP,
-            zPass : StencilOperation.KEEP
-        };
-
         return context.createViewportQuadCommand(pointOcclusionStr, {
             uniformMap : uniformMap,
             framebuffer : processor._framebuffers.screenSpacePass,
             renderState : RenderState.fromCache({
-                stencilTest : {
-                    enabled : true,
-                    reference : 0,
-                    mask : 1,
-                    frontFunction : func,
-                    backFunction : func,
-                    frontOperation : op,
-                    backOperation : op
-                }
+                stencilTest : processor._positiveStencilTest
             }),
             pass : Pass.CESIUM_3D_TILE,
             owner : processor
@@ -525,6 +486,7 @@ define([
             uniformMap : uniformMap,
             framebuffer : processor._framebuffers.densityEstimationPass,
             renderState : RenderState.fromCache({
+                stencilTest : processor._negativeStencilTest
             }),
             pass : Pass.CESIUM_3D_TILE,
             owner : processor
@@ -830,7 +792,7 @@ define([
             owner : processor
         });
 
-        var aoCommand = aoStage(processor, context, processor._sectorTextures[0]);
+        var aoCommand = aoStage(processor, context);
 
         var framebuffers = processor._framebuffers;
         var clearCommands = {};
@@ -838,7 +800,8 @@ define([
             if (framebuffers.hasOwnProperty(name)) {
                 // The screen space pass should consider
                 // the stencil value, so we don't clear it
-                // here.
+                // here. 1.0 / densityScale is the base density
+                // for invalid pixels, so we clear to that.
                 // Also we want to clear the AO buffer to white
                 // so that the pixels that never get region-grown
                 // do not appear black
@@ -846,6 +809,15 @@ define([
                     clearCommands[name] = new ClearCommand({
                         framebuffer : framebuffers[name],
                         color : new Color(0.0, 0.0, 0.0, 0.0),
+                        depth : 1.0,
+                        renderState : RenderState.fromCache(),
+                        pass : Pass.CESIUM_3D_TILE,
+                        owner : processor
+                    });
+                } else if (name === 'densityEstimationPass') {
+                    clearCommands[name] = new ClearCommand({
+                        framebuffer : framebuffers[name],
+                        color : new Color(1.0 / processor.densityScaleFactor, 0.0, 0.0, 0.0),
                         depth : 1.0,
                         renderState : RenderState.fromCache(),
                         pass : Pass.CESIUM_3D_TILE,
