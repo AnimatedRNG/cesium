@@ -683,7 +683,8 @@ define([
             sigmoidSharpness : 0.2,
             sigmoidDomainOffset : 0.2,
             dropoutFactor : 0.0,
-            delay : 0
+            delay : 0,
+            splitScreenX : 500.0,
         };
 
         this._pointCloudPostProcessor = new PointCloudPostProcessor(this.pointCloudPostProcessorOptions);

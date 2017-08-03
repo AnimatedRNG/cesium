@@ -105,6 +105,7 @@ define([
         this.sigmoidSharpness = options.sigmoidSharpness;
         this.dropoutFactor = options.dropoutFactor;
         this.delay = options.delay;
+        this.splitScreenX = options.splitScreenX;
 
         this._pointArray = undefined;
 
@@ -261,6 +262,15 @@ define([
         var depthTextures = new Array(3);
         var aoTextures = new Array(2);
 
+        var priorTexture = new Texture({
+            context : context,
+            width : screenWidth,
+            height : screenHeight,
+            pixelFormat : PixelFormat.RGBA,
+            pixelDatatype : PixelDatatype.UNSIGNED_BYTE,
+            sampler : createSampler()
+        });
+
         var ecTexture = new Texture({
             context : context,
             width : screenWidth,
@@ -357,6 +367,13 @@ define([
                 depthStencilTexture : dirty,
                 destroyAttachments : false
             }),
+            copyPriorPass : new Framebuffer({
+                context : context,
+                colorTextures : [
+                    priorTexture
+                ],
+                destroyAttachments : false
+            }),
             screenSpacePass : new Framebuffer({
                 context : context,
                 colorTextures : [depthTextures[0], aoTextures[0]],
@@ -408,6 +425,7 @@ define([
         processor._aoTextures = aoTextures;
         processor._colorTextures = colorTextures;
         processor._ecTexture = ecTexture;
+        processor._priorTexture = priorTexture;
         processor._dirty = dirty;
     }
 
@@ -585,6 +603,34 @@ define([
         });
     }
 
+    function copyPriorStage(processor, context) {
+        var uniformMap = {
+            pointCloud_colorTexture : function() {
+                return processor._colorTextures[0];
+            }
+        }
+
+        var framebuffer = processor._framebuffers.copyPriorPass;
+
+        var copyPriorStageStr =
+            'uniform sampler2D pointCloud_colorTexture; \n' +
+            'varying vec2 v_textureCoordinates; \n' +
+            'void main() \n' +
+            '{ \n' +
+            '    vec4 raw = texture2D(pointCloud_colorTexture, v_textureCoordinates); \n' +
+            '    gl_FragColor = raw; \n' +
+            '} \n';
+
+        return context.createViewportQuadCommand(copyPriorStageStr, {
+            uniformMap : uniformMap,
+            framebuffer : framebuffer,
+            renderState : RenderState.fromCache({
+            }),
+            pass : Pass.CESIUM_3D_TILE,
+            owner : processor
+        });
+    }
+
     function copyRegionGrowingColorStage(processor, context, i) {
         var uniformMap = {
             pointCloud_colorTexture : function() {
@@ -701,7 +747,7 @@ define([
         });
     }
 
-        function debugViewStage(processor, context, texture) {
+    function debugViewStage(processor, context, texture) {
         var uniformMap = {
             debugTexture : function() {
                 return texture;
@@ -738,6 +784,7 @@ define([
         var i;
         processor._drawCommands.densityEdgeCullCommand = densityEdgeCullStage(processor, context);
         processor._drawCommands.pointOcclusionCommand = pointOcclusionStage(processor, context);
+        processor._drawCommands.copyPriorCommand = copyPriorStage(processor, context);
 
         for (i = 0; i < numRegionGrowingPasses; i++) {
             regionGrowingCommands[i] = regionGrowingStage(processor, context, i);
@@ -749,19 +796,33 @@ define([
 
         var blendFS =
             '#define EPS 1e-8 \n' +
+            '#define SPLIT_SCREEN_BORDER 3.0 \n' +
             '#define enableAO' +
             '#extension GL_EXT_frag_depth : enable \n' +
+            'uniform sampler2D pointCloud_priorColor; \n' +
+            'uniform sampler2D pointCloud_priorDepth; \n' +
             'uniform sampler2D pointCloud_colorTexture; \n' +
             'uniform sampler2D pointCloud_depthTexture; \n' +
             'uniform sampler2D pointCloud_aoTexture; \n' +
             'uniform float sigmoidDomainOffset; \n' +
             'uniform float sigmoidSharpness; \n' +
+            'uniform float splitScreenX; \n' +
             'varying vec2 v_textureCoordinates; \n\n' +
             'float sigmoid(float x, float sharpness) { \n' +
             '    return sharpness * x / (sharpness - x + 1.0);' +
             '} \n\n' +
             'void main() \n' +
             '{ \n' +
+            '    if (gl_FragCoord.x < splitScreenX) { \n' +
+            '        if (gl_FragCoord.x < splitScreenX - SPLIT_SCREEN_BORDER) { \n' +
+            '            gl_FragColor = texture2D(pointCloud_priorColor, v_textureCoordinates); \n' +
+            '            gl_FragDepthEXT = texture2D(pointCloud_priorDepth, v_textureCoordinates).r; \n' +
+            '        } else { \n' +
+            '            gl_FragColor = vec4(vec3(0.0), 1.0); \n' +
+            '            gl_FragDepthEXT = 1.0; \n' +
+            '        } \n' +
+            '        return; \n' +
+            '    } \n' +
             '    vec4 color = texture2D(pointCloud_colorTexture, v_textureCoordinates); \n' +
             '    #ifdef enableAO \n' +
             '    float ao = czm_unpackDepth(texture2D(pointCloud_aoTexture, v_textureCoordinates)); \n' +
@@ -792,6 +853,12 @@ define([
         );
 
         var blendUniformMap = {
+            pointCloud_priorColor : function() {
+                return processor._priorTexture;
+            },
+            pointCloud_priorDepth : function() {
+                return processor._dirty;
+            },
             pointCloud_colorTexture : function() {
                 return processor._colorTextures[1 - numRegionGrowingPasses % 2];
             },
@@ -800,6 +867,9 @@ define([
             },
             pointCloud_aoTexture : function() {
                 return processor._aoTextures[1 - numRegionGrowingPasses % 2];
+            },
+            splitScreenX : function() {
+                return processor.splitScreenX;
             },
             sigmoidDomainOffset : function() {
                 return processor.sigmoidDomainOffset;
@@ -987,7 +1057,8 @@ define([
             tileset.pointCloudPostProcessorOptions.sigmoidDomainOffset !== this.sigmoidDomainOffset ||
             tileset.pointCloudPostProcessorOptions.sigmoidSharpness !== this.sigmoidSharpness ||
             tileset.pointCloudPostProcessorOptions.dropoutFactor !== this.dropoutFactor ||
-            tileset.pointCloudPostProcessorOptions.delay !== this.delay) {
+            tileset.pointCloudPostProcessorOptions.delay !== this.delay ||
+            tileset.pointCloudPostProcessorOptions.splitScreenX !== this.splitScreenX) {
             this.occlusionAngle = tileset.pointCloudPostProcessorOptions.occlusionAngle;
             this.rangeParameter = tileset.pointCloudPostProcessorOptions.rangeParameter;
             this.neighborhoodHalfWidth = tileset.pointCloudPostProcessorOptions.neighborhoodHalfWidth;
@@ -1006,6 +1077,7 @@ define([
             this.sigmoidSharpness = tileset.pointCloudPostProcessorOptions.sigmoidSharpness;
             this.dropoutFactor = tileset.pointCloudPostProcessorOptions.dropoutFactor;
             this.delay = tileset.pointCloudPostProcessorOptions.delay;
+            this.splitScreenX = tileset.pointCloudPostProcessorOptions.splitScreenX;
             dirty = true;
         }
 
@@ -1063,6 +1135,7 @@ define([
         // Apply processing commands
         var densityEdgeCullCommand = this._drawCommands.densityEdgeCullCommand;
         var pointOcclusionCommand = this._drawCommands.pointOcclusionCommand;
+        var copyPriorCommand = this._drawCommands.copyPriorCommand;
         var regionGrowingCommands = this._drawCommands.regionGrowingCommands;
         var copyCommands = this._drawCommands.copyCommands;
         var stencilCommands = this._drawCommands.stencilCommands;
@@ -1071,6 +1144,7 @@ define([
         var debugViewCommand = this._drawCommands.debugViewCommand;
         var numRegionGrowingCommands = regionGrowingCommands.length;
 
+        commandList.push(copyPriorCommand);
         commandList.push(clearCommands['screenSpacePass']);
         commandList.push(clearCommands['aoBufferB']);
         commandList.push(pointOcclusionCommand);
