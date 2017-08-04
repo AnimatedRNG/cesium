@@ -814,9 +814,6 @@ define([
             pointCloud_priorColor : function() {
                 return processor._priorTexture;
             },
-            pointCloud_priorDepth : function() {
-                return processor._dirty;
-            },
             pointCloud_colorTexture : function() {
                 return processor._colorTextures[1 - numRegionGrowingPasses % 2];
             },
