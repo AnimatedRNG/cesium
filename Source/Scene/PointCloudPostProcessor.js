@@ -33,6 +33,7 @@ define([
         '../Shaders/PostProcessFilters/RegionGrowingPassGL1',
         '../Shaders/PostProcessFilters/RegionGrowingPassGL2',
         '../Shaders/PostProcessFilters/DensityEdgeCullPass',
+        '../Shaders/PostProcessFilters/PointCloudPostProcessorBlendPass'
     ], function(
         Color,
         ComponentDatatype,
@@ -66,7 +67,8 @@ define([
         PointOcclusionPassGL2,
         RegionGrowingPassGL1,
         RegionGrowingPassGL2,
-        DensityEdgeCullPass
+        DensityEdgeCullPass,
+        PointCloudPostProcessorBlendPass
     ) {
     'use strict';
 
@@ -608,7 +610,7 @@ define([
             pointCloud_colorTexture : function() {
                 return processor._colorTextures[0];
             }
-        }
+        };
 
         var framebuffer = processor._framebuffers.copyPriorPass;
 
@@ -794,60 +796,16 @@ define([
         copyCommands[0] = copyRegionGrowingColorStage(processor, context, 0);
         copyCommands[1] = copyRegionGrowingColorStage(processor, context, 1);
 
-        var blendFS =
-            '#define EPS 1e-8 \n' +
-            '#define SPLIT_SCREEN_BORDER 3.0 \n' +
-            '#define enableAO' +
-            '#extension GL_EXT_frag_depth : enable \n' +
-            'uniform sampler2D pointCloud_priorColor; \n' +
-            'uniform sampler2D pointCloud_priorDepth; \n' +
-            'uniform sampler2D pointCloud_colorTexture; \n' +
-            'uniform sampler2D pointCloud_depthTexture; \n' +
-            'uniform sampler2D pointCloud_aoTexture; \n' +
-            'uniform float sigmoidDomainOffset; \n' +
-            'uniform float sigmoidSharpness; \n' +
-            'uniform float splitScreenX; \n' +
-            'varying vec2 v_textureCoordinates; \n\n' +
-            'float sigmoid(float x, float sharpness) { \n' +
-            '    return sharpness * x / (sharpness - x + 1.0);' +
-            '} \n\n' +
-            'void main() \n' +
-            '{ \n' +
-            '    if (gl_FragCoord.x < splitScreenX) { \n' +
-            '        if (gl_FragCoord.x < splitScreenX - SPLIT_SCREEN_BORDER) { \n' +
-            '            gl_FragColor = texture2D(pointCloud_priorColor, v_textureCoordinates); \n' +
-            '            gl_FragDepthEXT = texture2D(pointCloud_priorDepth, v_textureCoordinates).r; \n' +
-            '        } else { \n' +
-            '            gl_FragColor = vec4(vec3(0.0), 1.0); \n' +
-            '            gl_FragDepthEXT = 1.0; \n' +
-            '        } \n' +
-            '        return; \n' +
-            '    } \n' +
-            '    vec4 color = texture2D(pointCloud_colorTexture, v_textureCoordinates); \n' +
-            '    #ifdef enableAO \n' +
-            '    float ao = czm_unpackDepth(texture2D(pointCloud_aoTexture, v_textureCoordinates)); \n' +
-            '    ao = clamp(sigmoid(clamp(ao + sigmoidDomainOffset, 0.0, 1.0), sigmoidSharpness), 0.0, 1.0); \n' +
-            '    color.xyz = color.xyz * ao; \n' +
-            '    #endif // enableAO \n' +
-            '    float rayDist = czm_unpackDepth(texture2D(pointCloud_depthTexture, v_textureCoordinates)); \n' +
-            '    if (length(rayDist) < EPS) { \n' +
-            '        discard;' +
-            '    } else { \n' +
-            '        float frustumLength = czm_clampedFrustum.y - czm_clampedFrustum.x; \n' +
-            '        float scaledRayDist = rayDist * frustumLength + czm_clampedFrustum.x; \n' +
-            '        vec4 ray = normalize(czm_windowToEyeCoordinates(vec4(gl_FragCoord))); \n' +
-            '        float depth = czm_eyeToWindowCoordinates(ray * scaledRayDist).z; \n' +
-            '        gl_FragColor = color; \n' +
-            '        gl_FragDepthEXT = depth; \n' +
-            '    }' +
-            '} \n';
-
         var blendRenderState = RenderState.fromCache({
-            blending : BlendingState.ALPHA_BLEND
+            blending : BlendingState.ALPHA_BLEND,
+            depthMask : true,
+            depthTest : {
+                enabled : true
+            }
         });
 
-        blendFS = replaceConstants(
-            blendFS,
+        var blendFS = replaceConstants(
+            PointCloudPostProcessorBlendPass,
             'enableAO',
             processor.enableAO && !processor.densityViewEnabled && !processor.stencilViewEnabled
         );
