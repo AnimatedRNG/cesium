@@ -442,9 +442,6 @@ define([
             },
             dropoutFactor : function() {
                 return processor.dropoutFactor;
-            },
-            ONE : function() {
-                return 1.0;
             }
         };
 
@@ -796,9 +793,6 @@ define([
             },
             sigmoidSharpness : function() {
                 return processor.sigmoidSharpness;
-            },
-            ONE : function() {
-                return 1.0;
             }
         };
 
